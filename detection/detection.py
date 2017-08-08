@@ -33,22 +33,29 @@ def resize(im, target_size, max_size):
     im = cv2.resize(im, None, None, fx=im_scale, fy=im_scale, interpolation=cv2.INTER_LINEAR)
     return im, im_scale
 
+def write_image(detections, scale, original_image):
+    """Write image with bounding boxes to file"""
+    for i in range(detections.shape[0]):
+        bbox = detections[i, :4]
+        cv2.rectangle(original_image, (int(round(bbox[0]/scale)), int(round(bbox[1]/scale))),
+                      (int(round(bbox[2]/scale)), int(round(bbox[3]/scale))),  (0, 255, 0), 2)
+    cv2.imwrite("result.jpg", original_image)
 
-def main():
-    color  = cv2.imread(args.img)
-    img  = cv2.cvtColor(color, cv2.COLOR_BGR2RGB)
-    img, scale = resize(img.copy(), args.scale, args.max_scale)
-    im_info = np.array([[img.shape[0], img.shape[1], scale]], dtype=np.float32)  # (h, w, scale)
-    img = np.swapaxes(img, 0, 2)
-    img = np.swapaxes(img, 1, 2)  # change to (c, h, w) order
-    img = img[np.newaxis, :]  # extend to (n, c, h, w)
+def execute_detection(image_path, scale, max_scale, gpu_id, prefix, epoch, thresh, nms_thresh):
+    original_image  = cv2.imread(image_path)
+    transformed_image  = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
+    transformed_image, scale = resize(transformed_image.copy(), scale, max_scale)
+    image_info = np.array([[transformed_image.shape[0], transformed_image.shape[1], scale]], dtype=np.float32)  # (h, w, scale)
+    transformed_image = np.swapaxes(transformed_image, 0, 2)
+    transformed_image = np.swapaxes(transformed_image, 1, 2)  # change to (c, h, w) order
+    transformed_image = transformed_image[np.newaxis, :]  # extend to (n, c, h, w)
 
-    ctx = mx.gpu(args.gpu)
-    _, arg_params, aux_params = mx.model.load_checkpoint(args.prefix, args.epoch)
+    ctx = mx.gpu(gpu_id)
+    _, arg_params, aux_params = mx.model.load_checkpoint(prefix, epoch)
     arg_params, aux_params = ch_dev(arg_params, aux_params, ctx)
     sym = resnet_50(num_class=2)
-    arg_params["data"] = mx.nd.array(img, ctx)
-    arg_params["im_info"] = mx.nd.array(im_info, ctx)
+    arg_params["data"] = mx.nd.array(transformed_image, ctx)
+    arg_params["im_info"] = mx.nd.array(image_info, ctx)
     exe = sym.bind(ctx, arg_params, args_grad=None, grad_req="null", aux_states=aux_params)
 
     tic = time.time()
@@ -58,31 +65,30 @@ def main():
     scores = output_dict['cls_prob_reshape_output'].asnumpy()[0]
     bbox_deltas = output_dict['bbox_pred_reshape_output'].asnumpy()[0]
     pred_boxes = bbox_pred(rois, bbox_deltas)
-    pred_boxes = clip_boxes(pred_boxes, (im_info[0][0], im_info[0][1]))
+    pred_boxes = clip_boxes(pred_boxes, (image_info[0][0], image_info[0][1]))
     cls_boxes = pred_boxes[:, 4:8]
     cls_scores = scores[:, 1]
-    keep = np.where(cls_scores >= args.thresh)[0]
+    keep = np.where(cls_scores >= thresh)[0]
     cls_boxes = cls_boxes[keep, :]
     cls_scores = cls_scores[keep]
-    dets = np.hstack((cls_boxes, cls_scores[:, np.newaxis])).astype(np.float32)
-    keep = nms(dets.astype(np.float32), args.nms_thresh)
-    dets = dets[keep, :]
+    detections = np.hstack((cls_boxes, cls_scores[:, np.newaxis])).astype(np.float32)
+    keep = nms(detections.astype(np.float32), nms_thresh)
+    detections = detections[keep, :]
     toc = time.time()
 
     print "time cost is:{}s".format(toc-tic)
-    for i in range(dets.shape[0]):
-        bbox = dets[i, :4]
-        cv2.rectangle(color, (int(round(bbox[0]/scale)), int(round(bbox[1]/scale))),
-                      (int(round(bbox[2]/scale)), int(round(bbox[3]/scale))),  (0, 255, 0), 2)
-    cv2.imwrite("result.jpg", color)
 
-if __name__ == "__main__":
+    output_detections = detections.tolist()
+
+    return output_detections, scale
+
+def main():
     parser = argparse.ArgumentParser(description="use pre-trainned resnet model to classify one image")
-    parser.add_argument('--img', type=str, default='test.jpg', help='input image for classification')
+    parser.add_argument('--img', type=str, default='test.jpg', help='input image/directory for classification')
     parser.add_argument('--gpu', type=int, default=0, help='the gpu id used for predict')
     parser.add_argument('--prefix', type=str, default='mxnet-face-fr50', help='the prefix of the pre-trained model')
     parser.add_argument('--epoch', type=int, default=0, help='the epoch of the pre-trained model')
-    parser.add_argument('--thresh', type=float, default=0.8, help='the threshold of face score, set bigger will get more'
+    parser.add_argument('--thresh', type=float, default=0.1, help='the threshold of face score, set bigger will get more'
                                                                   'likely face result')
     parser.add_argument('--nms-thresh', type=float, default=0.3, help='the threshold of nms')
     parser.add_argument('--min-size', type=int, default=24, help='the min size of object')
