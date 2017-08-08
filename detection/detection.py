@@ -1,7 +1,12 @@
+import argparse, time
+import os
+import json
+
 import numpy as np
+
 import cv2
 import mxnet as mx
-import argparse, time
+
 from symbol.resnet import *
 from symbol.config import config
 from symbol.processing import bbox_pred, clip_boxes, nms
@@ -100,4 +105,63 @@ def main():
     config.TEST.RPN_MIN_SIZE = args.min_size
     config.SCALES = (args.scale, )
     config.MAX_SIZE = args.max_scale
+
+    args_path = os.path.expanduser(args.img)
+
+    if os.path.isfile(args_path):
+        execute_detection(args.img,
+                          args.scale,
+                          args.max_scale,
+                          args.gpu,
+                          args.prefix,
+                          args.epoch,
+                          args.thresh,
+                          args.nms_thresh
+                         )
+
+        print "Done."
+
+    elif os.path.isdir(args_path):
+        dir_path = os.path.expanduser(args.img)
+        image_paths = []
+        for path in os.listdir(dir_path):
+            absolute_path = os.path.abspath(os.path.join(dir_path, path))
+            # Check if item is a valid image
+            if cv2.imread(absolute_path) is not None:
+                image_paths.append(absolute_path)
+            else:
+                print "Skipping path, not an image: {}".format(path)
+
+        print "Images to process: "
+        for image_path in image_paths:
+            print image_path
+
+        all_detections = {}
+        print "Starting processing."
+        for image_path in image_paths:
+            detections, scale = \
+                execute_detection(image_path,
+                                  args.scale,
+                                  args.max_scale,
+                                  args.gpu,
+                                  args.prefix,
+                                  args.epoch,
+                                  args.thresh,
+                                  args.nms_thresh
+                                 )
+            all_detections[os.path.basename(image_path)] = {
+                "scale" : scale,
+                "detections" : detections
+            }
+
+        print "Writing results to file."
+        with open('results.json', 'w') as results_file:
+            json.dump(all_detections, results_file, indent=2)
+
+        print "Done."
+
+    else:
+        print "{} is not a valid path to a file nor directory.".format(args.img)
+
+if __name__ == "__main__":
     main()
