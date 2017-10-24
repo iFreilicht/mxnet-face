@@ -54,14 +54,14 @@ def bbox_pred(boxes, box_deltas, is_train=False):
     dw = box_deltas[:, 2::4]
     dh = box_deltas[:, 3::4]
     if is_train:
-        dx = np.array(map(lambda x: np.sign(x)*10 if abs(x) > 10 else x, dx))
-        dy = np.array(map(lambda x: np.sign(x)*10 if abs(x) > 10 else x, dy))
+        dx = np.array([np.sign(x)*10 if abs(x) > 10 else x for x in dx])
+        dy = np.array([np.sign(x)*10 if abs(x) > 10 else x for x in dy])
     pred_ctr_x = dx * widths[:, np.newaxis] + ctr_x[:, np.newaxis]
     pred_ctr_y = dy * heights[:, np.newaxis] + ctr_y[:, np.newaxis]
 
     if is_train:
-        dw = np.array(map(lambda x: np.sign(x)*8 if abs(x) > 8 else x, dw))
-        dh = np.array(map(lambda x: np.sign(x)*8 if abs(x) > 8 else x, dh))
+        dw = np.array([np.sign(x)*8 if abs(x) > 8 else x for x in dw])
+        dh = np.array([np.sign(x)*8 if abs(x) > 8 else x for x in dh])
     pred_w = np.exp(dw) * widths[:, np.newaxis]
     pred_h = np.exp(dh) * heights[:, np.newaxis]
 
@@ -190,7 +190,7 @@ def generate_anchors(base_size=16, ratios=[0.5, 1, 2],
     base_anchor = np.array([1, 1, base_size, base_size]) - 1
     ratio_anchors = _ratio_enum(base_anchor, ratios)
     anchors = np.vstack([_scale_enum(ratio_anchors[i, :], scales)
-                         for i in xrange(ratio_anchors.shape[0])])
+                         for i in range(ratio_anchors.shape[0])])
     return anchors
 
 

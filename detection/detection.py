@@ -7,17 +7,17 @@ import numpy as np
 import cv2
 import mxnet as mx
 
-from symbol.resnet import *
-from symbol.config import config
-from symbol.processing import bbox_pred, clip_boxes, nms
+from .symbol.resnet import *
+from .symbol.config import config
+from .symbol.processing import bbox_pred, clip_boxes, nms
 
 
 def ch_dev(arg_params, aux_params, ctx):
     new_args = dict()
     new_auxs = dict()
-    for k, v in arg_params.items():
+    for k, v in list(arg_params.items()):
         new_args[k] = v.as_in_context(ctx)
-    for k, v in aux_params.items():
+    for k, v in list(aux_params.items()):
         new_auxs[k] = v.as_in_context(ctx)
     return new_args, new_auxs
 
@@ -56,6 +56,7 @@ def execute_detection(image_path, scale, max_scale, gpu_id, prefix, epoch, thres
     transformed_image = transformed_image[np.newaxis, :]  # extend to (n, c, h, w)
 
     ctx = mx.gpu(gpu_id)
+    #ctx = mx.cpu(0)
     _, arg_params, aux_params = mx.model.load_checkpoint(prefix, epoch)
     arg_params, aux_params = ch_dev(arg_params, aux_params, ctx)
     sym = resnet_50(num_class=2)
@@ -81,7 +82,7 @@ def execute_detection(image_path, scale, max_scale, gpu_id, prefix, epoch, thres
     detections = detections[keep, :]
     toc = time.time()
 
-    print "time cost is:{}s".format(toc-tic)
+    print("time cost is:{}s".format(toc-tic))
 
     output_detections = detections.tolist()
 
@@ -119,7 +120,7 @@ def main():
                           args.nms_thresh
                          )
 
-        print "Done."
+        print("Done.")
 
     elif os.path.isdir(args_path):
         dir_path = os.path.expanduser(args.img)
@@ -130,14 +131,14 @@ def main():
             if cv2.imread(absolute_path) is not None:
                 image_paths.append(absolute_path)
             else:
-                print "Skipping path, not an image: {}".format(path)
+                print("Skipping path, not an image: {}".format(path))
 
-        print "Images to process: "
+        print("Images to process: ")
         for image_path in image_paths:
-            print image_path
+            print(image_path)
 
         all_detections = {}
-        print "Starting processing."
+        print("Starting processing.")
         for image_path in image_paths:
             detections, scale = \
                 execute_detection(image_path,
@@ -154,14 +155,14 @@ def main():
                 "detections" : detections
             }
 
-        print "Writing results to file."
+        print("Writing results to file.")
         with open('results.json', 'w') as results_file:
             json.dump(all_detections, results_file, indent=2)
 
-        print "Done."
+        print("Done.")
 
     else:
-        print "{} is not a valid path to a file nor directory.".format(args.img)
+        print("{} is not a valid path to a file nor directory.".format(args.img))
 
 if __name__ == "__main__":
     main()

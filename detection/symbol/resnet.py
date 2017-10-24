@@ -1,6 +1,6 @@
 import mxnet as mx
-import symbol.proposal
-from config import config
+from . import proposal
+from .config import config
 
 def residual_unit(data, num_filter, stride, dim_match, name, bottle_neck=True, bn_mom=0.9, workspace=512,
                   bn_global=True):

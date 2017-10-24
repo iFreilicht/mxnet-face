@@ -7,8 +7,8 @@ import mxnet as mx
 import numpy as np
 import numpy.random as npr
 
-from config import config
-from processing import bbox_pred, clip_boxes, clip_pad, nms, generate_anchors
+from .config import config
+from .processing import bbox_pred, clip_boxes, clip_pad, nms, generate_anchors
 
 class ProposalOperator(mx.operator.CustomOp):
     def __init__(self, feat_stride, scales, ratios, is_train=False, output_score=False):
