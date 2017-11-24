@@ -11,6 +11,8 @@ from .symbol.resnet import *
 from .symbol.config import config
 from .symbol.processing import bbox_pred, clip_boxes, nms
 
+import logging
+
 
 def ch_dev(arg_params, aux_params, ctx):
     """Copy parameters to new MXNet context (GPU or CPU)"""
@@ -47,7 +49,7 @@ def write_image(detections, scale, original_image):
                       (int(round(bbox[2]/scale)), int(round(bbox[3]/scale))),  (0, 255, 0), 2)
     cv2.imwrite("result.jpg", original_image)
 
-def execute_detection(image_path, scale, max_scale, gpu_id, prefix, epoch, thresh, nms_thresh):
+def execute_detection(image_path, scale, max_scale, prefix, epoch, thresh, nms_thresh, gpu_id=None, cpu_id=None):
     original_image  = cv2.imread(image_path)
     transformed_image  = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
     transformed_image, scale = resize(transformed_image.copy(), scale, max_scale)
@@ -59,9 +61,12 @@ def execute_detection(image_path, scale, max_scale, gpu_id, prefix, epoch, thres
     #-------
     # Setup network
     #-------
-    # Initialise GPU
-    #ctx = mx.gpu(gpu_id)
-    ctx = mx.cpu(0)
+    if gpu_id is not None:
+        ctx = mx.gpu(gpu_id)
+    elif cpu_id is not None:
+        ctx = mx.cpu(cpu_id)
+    else:
+        raise TypeError('Either gpu_id or cpu_id need to be provided!')
     # Load parameters of trained model into RAM
     _, arg_params, aux_params = mx.model.load_checkpoint(prefix, epoch)
     # Move parameters to GPUs RAM
@@ -132,11 +137,11 @@ def main():
         execute_detection(args.img,
                           args.scale,
                           args.max_scale,
-                          args.gpu,
                           args.prefix,
                           args.epoch,
                           args.thresh,
-                          args.nms_thresh
+                          args.nms_thresh,
+                          args.gpu_id
                          )
 
         print("Done.")
@@ -163,11 +168,11 @@ def main():
                 execute_detection(image_path,
                                   args.scale,
                                   args.max_scale,
-                                  args.gpu,
                                   args.prefix,
                                   args.epoch,
                                   args.thresh,
-                                  args.nms_thresh
+                                  args.nms_thresh,
+                                  args.gpu_id
                                  )
             all_detections[os.path.basename(image_path)] = {
                 "scale" : scale,
