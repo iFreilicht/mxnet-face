@@ -13,6 +13,7 @@ from .symbol.processing import bbox_pred, clip_boxes, nms
 
 
 def ch_dev(arg_params, aux_params, ctx):
+    """Copy parameters to new MXNet context (GPU or CPU)"""
     new_args = dict()
     new_auxs = dict()
     for k, v in list(arg_params.items()):
@@ -55,21 +56,37 @@ def execute_detection(image_path, scale, max_scale, gpu_id, prefix, epoch, thres
     transformed_image = np.swapaxes(transformed_image, 1, 2)  # change to (c, h, w) order
     transformed_image = transformed_image[np.newaxis, :]  # extend to (n, c, h, w)
 
-    ctx = mx.gpu(gpu_id)
-    #ctx = mx.cpu(0)
+    #-------
+    # Setup network
+    #-------
+    # Initialise GPU
+    #ctx = mx.gpu(gpu_id)
+    ctx = mx.cpu(0)
+    # Load parameters of trained model into RAM
     _, arg_params, aux_params = mx.model.load_checkpoint(prefix, epoch)
+    # Move parameters to GPUs RAM
     arg_params, aux_params = ch_dev(arg_params, aux_params, ctx)
+    # Create ResNet as MXNet Symbol
     sym = resnet_50(num_class=2)
+    # Load image data into parameters on GPU
     arg_params["data"] = mx.nd.array(transformed_image, ctx)
     arg_params["im_info"] = mx.nd.array(image_info, ctx)
+    # Bind ResNet to executor
     exe = sym.bind(ctx, arg_params, args_grad=None, grad_req="null", aux_states=aux_params)
 
+    #-------
+    # Run network
+    #-------
+    # Start time measurement
     tic = time.time()
+    # Execute neural network
     exe.forward(is_train=False)
+    # Group output
     output_dict = {name: nd for name, nd in zip(sym.list_outputs(), exe.outputs)}
     rois = output_dict['rpn_rois_output'].asnumpy()[:, 1:]  # first column is index
     scores = output_dict['cls_prob_reshape_output'].asnumpy()[0]
     bbox_deltas = output_dict['bbox_pred_reshape_output'].asnumpy()[0]
+    # Predict bounding boxes
     pred_boxes = bbox_pred(rois, bbox_deltas)
     pred_boxes = clip_boxes(pred_boxes, (image_info[0][0], image_info[0][1]))
     cls_boxes = pred_boxes[:, 4:8]
@@ -80,6 +97,8 @@ def execute_detection(image_path, scale, max_scale, gpu_id, prefix, epoch, thres
     detections = np.hstack((cls_boxes, cls_scores[:, np.newaxis])).astype(np.float32)
     keep = nms(detections.astype(np.float32), nms_thresh)
     detections = detections[keep, :]
+
+    #End time measurement
     toc = time.time()
 
     print("time cost is:{}s".format(toc-tic))
